@@ -152,8 +152,40 @@ class FeatureCalculationTestCase(TestCase):
         self.assertAlmostEqual(res, expected_res, places=2)
 
     def test_augmented_dickey_fuller(self):
-        pass
-        # todo: add unit test
+        # todo: add unit test for the values of the test statistic
+
+        # the adf hypothesis test checks for unit roots,
+        # so H_0 = {random drift} vs H_1 = {AR(1) model}
+
+        # H0 is true
+        np.random.seed(seed=42)
+        x = np.cumsum(np.random.uniform(size=100))
+        param = [{"attr": "teststat"}, {"attr": "pvalue"}, {"attr": "usedlag"}]
+        expected_index = ['attr_teststat', 'attr_pvalue', 'attr_usedlag']
+
+        res = augmented_dickey_fuller(x=x, param=param)
+        res = pd.Series(dict(res))
+        six.assertCountEqual(self, list(res.index), expected_index)
+        self.assertGreater(res["attr_pvalue"], 0.10)
+        self.assertEqual(res["attr_usedlag"], 0)
+
+        # H0 should be rejected for AR(1) model with x_{t} = 1/2 x_{t-1} + e_{t}
+        np.random.seed(seed=42)
+        e = np.random.normal(0.1, 0.1, size=100)
+        m = 50
+        x = [0] * m
+        x[0] = 100
+        for i in range(1, m):
+            x[i] = x[i-1] * 0.5 + e[i]
+        param = [{"attr": "teststat"}, {"attr": "pvalue"}, {"attr": "usedlag"}]
+        expected_index = ['attr_teststat', 'attr_pvalue', 'attr_usedlag']
+
+        res = augmented_dickey_fuller(x=x, param=param)
+        res = pd.Series(dict(res))
+        six.assertCountEqual(self, list(res.index), expected_index)
+        self.assertLessEqual(res["attr_pvalue"], 0.05)
+        self.assertEqual(res["attr_usedlag"], 0)
+
 
     def test_abs_energy(self):
         self.assertEqualOnAllArrayTypes(abs_energy, [1, 1, 1], 3)
@@ -504,11 +536,23 @@ class FeatureCalculationTestCase(TestCase):
         self.assertAlmostEqualOnAllArrayTypes(time_reversal_asymmetry_statistic, x, 0, 3)
 
         x = [1, 2, -3, 4]
-        # 1/2 * ( (4^2 * 2 + 3 * 2^2) + (3^2*1)-(2*1^1)) = 1/2 * (32+12+9-2) = 51/2
-        self.assertAlmostEqualOnAllArrayTypes(time_reversal_asymmetry_statistic, x, 25.5, 1)
-        # 4^2 * 1 - 2 * 1^2 = 16 -2
-        self.assertAlmostEqualOnAllArrayTypes(time_reversal_asymmetry_statistic, x, 14, 2)
+        # 1/2 * ( (4^2 * -3 + 3 * 2^2) + (3^2*2)-(2*1^1)) = 1/2 * (-48+12+18-2) = 20/2
+        self.assertAlmostEqualOnAllArrayTypes(time_reversal_asymmetry_statistic, x, -10, 1)
+        self.assertAlmostEqualOnAllArrayTypes(time_reversal_asymmetry_statistic, x, 0, 2)
         self.assertAlmostEqualOnAllArrayTypes(time_reversal_asymmetry_statistic, x, 0, 3)
+
+    def test_c3(self):
+        x = [1] * 10
+        self.assertAlmostEqualOnAllArrayTypes(c3, x, 1, 0)
+        self.assertAlmostEqualOnAllArrayTypes(c3, x, 1, 1)
+        self.assertAlmostEqualOnAllArrayTypes(c3, x, 1, 2)
+        self.assertAlmostEqualOnAllArrayTypes(c3, x, 1, 3)
+
+        x = [1, 2, -3, 4]
+        # 1/2 *(1*2*(-3)+2*(-3)*4) = 1/2 *(-6-24) = -30/2
+        self.assertAlmostEqualOnAllArrayTypes(c3, x, -15, 1)
+        self.assertAlmostEqualOnAllArrayTypes(c3, x, 0, 2)
+        self.assertAlmostEqualOnAllArrayTypes(c3, x, 0, 3)
 
     def test_binned_entropy(self):
         self.assertAlmostEqualOnAllArrayTypes(binned_entropy, [10] * 100, 0, 10)
@@ -641,7 +685,7 @@ class FeatureCalculationTestCase(TestCase):
         param = [{"attr": "pvalue"}, {"attr": "rvalue"}, {"attr": "intercept"}, {"attr": "slope"}, {"attr": "stderr"}]
         res = linear_trend(x, param)
 
-        
+
         res = pd.Series(dict(res))
 
         expected_index = ["attr_\"pvalue\"", "attr_\"intercept\"",

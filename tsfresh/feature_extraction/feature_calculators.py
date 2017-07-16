@@ -288,26 +288,34 @@ def mean_autocorrelation(x):
         return np.nanmean(acf(x, unbiased=True, fft=n > 1250)[1:])
 
 
-@set_property("fctype", "simple")
-def augmented_dickey_fuller(x):
+@set_property("fctype", "combiner")
+def augmented_dickey_fuller(x, param):
     """
     The Augmented Dickey-Fuller test is a hypothesis test which checks whether a unit root is present in a time
     series sample. This feature calculator returns the value of the respective test statistic.
 
     See the statsmodels implementation for references and more details.
-
+    
     :param x: the time series to calculate the feature of
     :type x: pandas.Series
+    :param param: contains dictionaries {"attr": x} with x str, either "teststat", "pvalue" or "usedlag"
+    :type param: list
     :return: the value of this feature
     :return type: float
     """
-
+    res = None
     try:
-        return adfuller(x)[0]
+        res = adfuller(x)
     except LinAlgError:
-        return np.NaN
+        res = np.NaN, np.NaN, np.NaN
     except ValueError:  # occurs if sample size is too small
-        return np.NaN
+        res = np.NaN, np.NaN, np.NaN
+
+    return [("attr_{}".format(config["attr"]),
+                  res[0] if config["attr"] == "teststat"
+             else res[1] if config["attr"] == "pvalue"
+             else res[2] if config["attr"] == "usedlag" else np.NaN)
+            for config in param]
 
 
 @set_property("fctype", "simple")
@@ -1064,12 +1072,51 @@ def time_reversal_asymmetry_statistic(x, lag):
     """
     n = len(x)
     x = np.asarray(x)
-    if 2 * lag > n:
+    if 2 * lag >= n:
         return 0
-    elif 2 * lag == n:
-        return x[n-1] * x[n-1] * x[0] - x[lag-1] * x[0] * x[0]
     else:
-        return np.mean((np.roll(x, 2 * -lag) * np.roll(x, 2 * -lag) * x - np.roll(x, -lag) * x * x)[0:(n - 2 * lag)])
+        return np.mean((np.roll(x, 2 * -lag) * np.roll(x, 2 * -lag) * np.roll(x, -lag) -
+                        np.roll(x, -lag) * x * x)[0:(n - 2 * lag)])
+
+
+@set_property("fctype", "simple")
+def c3(x, lag):
+    """
+    This function calculates the value of
+
+    .. math::
+
+        \\frac{1}{n-2lag} \sum_{i=0}^{n-2lag} x_{i + 2 \cdot lag}^2 \cdot x_{i + lag} \cdot x_{i}
+
+    which is
+
+    .. math::
+
+        \\mathbb{E}[L^2(X)^2 \cdot L(X) \cdot X]
+
+    where :math:`\\mathbb{E}` is the mean and :math:`L` is the lag operator. It was proposed in [1] as a measure of
+    non linearity in the time series.
+
+    References
+    ----------
+
+    .. [1] Schreiber, T. and Schmitz, A. (1997).
+       Discrimination power of measures for nonlinearity in a time series
+       PHYSICAL REVIEW E, VOLUME 55, NUMBER 5
+
+    :param x: the time series to calculate the feature of
+    :type x: pandas.Series
+    :param lag: the lag that should be used in the calculation of the feature
+    :type lag: int
+    :return: the value of this feature
+    :return type: float
+    """
+    n = len(x)
+    x = np.asarray(x)
+    if 2 * lag >= n:
+        return 0
+    else:
+        return np.mean((np.roll(x, 2 * -lag) * np.roll(x, -lag) * x)[0:(n - 2 * lag)])
 
 
 @set_property("fctype", "simple")
